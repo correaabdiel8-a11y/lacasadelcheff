@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>La Casa del Cheff — Digital Menu Board</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+<style>
+/* =====================================================================
+   LA CASA DEL CHEFF · DIGITAL MENU BOARD — PRIMERA EDICIÓN DE PRUEBA
+   -----------------------------------------------------------------------
+   Identidad deliberadamente distinta del otro menú (Pan de Oro / cálido
+   y minimalista): aquí todo es negro + dorado, tipografía condensada en
+   mayúsculas, transición de "cortinas" que cierran al centro, y los
+   elementos entran desde las esquinas convergiendo hacia su lugar.
+
+   IMÁGENES: por ahora NO están incrustadas en el código (a propósito).
+   El menú las busca en una carpeta local "img/" junto a este archivo,
+   usando el nombre EXACTO del archivo original que me diste — no las
+   reduje ni las convertí. Ver el objeto PRODUCTS más abajo: el campo
+   `file` es el nombre exacto que debe tener el archivo dentro de img/.
+   ===================================================================== */
+
+:root{
+  --bg:        #0B0A08;
+  --panel:     #17140F;
+  --gold:      #E8A23B;
+  --gold-bright:#FFC169;
+  --gold-deep: #A43B01;
+  --ink:       #F3ECDD;
+  --ink-soft:  rgba(243,236,221,0.66);
+  --line:      rgba(243,236,221,0.12);
+
+  --f-display: 'Bebas Neue', sans-serif;
+  --f-body: 'Manrope', sans-serif;
+  --pad: clamp(24px, 2.6vw, 54px);
+  --sidebar-w: clamp(92px, 7.2vw, 124px);
+}
+
+*{ margin:0; padding:0; box-sizing:border-box; }
+
+html,body{
+  width:100%; height:100%; overflow:hidden;
+  background:var(--bg); color:var(--ink);
+  font-family:var(--f-body);
+  -webkit-font-smoothing:antialiased;
+}
+
+@media (prefers-reduced-motion: reduce){
+  *{ animation-duration:.01ms !important; animation-iteration-count:1 !important; }
+}
+
+/* =========================== APP SHELL =========================== */
+
+.app{
+  width:100vw; height:100vh; position:relative;
+  display:grid; grid-template-columns: var(--sidebar-w) 1fr;
+  background:var(--bg); isolation:isolate;
+}
+
+/* ---- Fondo en movimiento: resplandor dorado girando lentísimo + barrido de brillo diagonal ---- */
+.app::before{
+  content:""; position:absolute; inset:-30%; z-index:0; pointer-events:none;
+  background: radial-gradient(circle at 30% 35%, rgba(232,162,59,.14), transparent 55%),
+              radial-gradient(circle at 75% 70%, rgba(164,59,1,.16), transparent 50%);
+  animation: glowSpin 90s linear infinite;
+  filter: blur(10px);
+}
+@keyframes glowSpin{ from{ transform:rotate(0deg);} to{ transform:rotate(360deg);} }
+
+.app::after{
+  content:""; position:absolute; inset:0; z-index:0; pointer-events:none;
+  background: linear-gradient(115deg, transparent 42%, rgba(232,162,59,.07) 50%, transparent 58%);
+  background-size: 320% 320%;
+  animation: sheenSweep 17s linear infinite;
+}
+@keyframes sheenSweep{
+  0%{ background-position: 0% 0%; }
+  100%{ background-position: 100% 100%; }
+}
+
+/* =========================== SIDEBAR PERSISTENTE =========================== */
+
+.sidebar{
+  position:relative; z-index:3; grid-column:1; overflow:hidden;
+  display:flex; flex-direction:column; align-items:center;
+  padding: clamp(18px,2vw,28px) 0;
+  border-right:1px solid var(--line);
+}
+
+/* ---- partículas doradas flotando por el menú lateral (dan movimiento
+   sin competir con el ícono/nombre de categoría: van por detrás, con
+   z-index negativo dentro del propio stacking context del sidebar). ---- */
+.sb-particles{ position:absolute; inset:0; z-index:-1; overflow:hidden; pointer-events:none; }
+.sbp{
+  position:absolute; bottom:-6%; border-radius:50%;
+  background:var(--gold-bright); box-shadow:0 0 7px rgba(255,193,105,.85);
+  opacity:0; animation: sbFloat linear infinite;
+}
+@keyframes sbFloat{
+  0%{ transform:translateY(0) translateX(0); opacity:0; }
+  8%{ opacity:.9; }
+  88%{ opacity:.45; }
+  100%{ transform:translateY(-112vh) translateX(var(--sbp-drift,8px)); opacity:0; }
+}
+
+/* ---- las mismas partículas doradas, ahora también sobre el escenario
+   principal (encima de las fotografías de producto). Van por encima de
+   las capas .layer pero por debajo de nada más: pointer-events:none, y
+   son pequeñas/tenues para no estorbar la lectura del nombre. ---- */
+.stage-particles{ position:absolute; inset:0; z-index:6; overflow:hidden; pointer-events:none; }
+
+.sb-logo{
+  width: clamp(46px,4vw,64px); height: clamp(46px,4vw,64px);
+  border-radius:50%; overflow:hidden; border:1px solid var(--line);
+  background:var(--panel); flex-shrink:0;
+}
+.sb-logo img{ width:100%; height:100%; object-fit:cover; }
+
+.sb-middle{
+  flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:16px; min-height:0;
+}
+.sb-cat-icon{
+  width:clamp(28px,2.4vw,36px); height:clamp(28px,2.4vw,36px); color:var(--gold);
+  flex-shrink:0;
+}
+.sb-cat-icon svg{ width:100%; height:100%; fill:none; stroke:currentColor; stroke-width:1.4; }
+.sb-cat-name{
+  writing-mode: vertical-rl; transform:rotate(180deg);
+  font-family:var(--f-display); letter-spacing:.14em; font-size:clamp(13px,1.05vw,18px);
+  color:var(--ink); white-space:nowrap; max-height:52vh; overflow:hidden;
+}
+
+.sb-progress{
+  width:2px; height:clamp(60px,10vh,120px); background:rgba(243,236,221,.14);
+  border-radius:2px; position:relative; overflow:hidden; flex-shrink:0;
+}
+.sb-progress-fill{
+  position:absolute; left:0; top:0; width:100%; background:var(--gold);
+  border-radius:2px; transition:height .6s cubic-bezier(.22,1,.36,1);
+}
+
+.sidebar.hidden{ opacity:0; pointer-events:none; }
+
+/* =========================== STAGE / CAPAS =========================== */
+
+.stage{ position:relative; z-index:1; grid-column:2; overflow:hidden; }
+.layer{ position:absolute; inset:0; opacity:0; }
+.layer.active{ opacity:1; z-index:2; }
+
+/* ---- Transiciones de escena: familia de fundidos/degradados premium.
+   El motor en JS elige una al azar en cada cambio de escena, aplicando
+   la animación directamente sobre las capas .layer (sin paneles). ---- */
+
+@keyframes layerFadeOut{ from{ opacity:1; } to{ opacity:0; } }
+@keyframes layerFadeIn{  from{ opacity:0; } to{ opacity:1; } }
+
+/* -- 1. Fundido con leve avance/retroceso de escala (cinematográfico) -- */
+@keyframes layerFadeZoomOut{ from{ opacity:1; transform:scale(1); } to{ opacity:0; transform:scale(1.045); } }
+@keyframes layerFadeZoomIn{  from{ opacity:0; transform:scale(1.045); } to{ opacity:1; transform:scale(1); } }
+
+/* -- 2. Fundido a negro (dip clásico) -- */
+@keyframes blackDip{ 0%{ opacity:0; } 46%{ opacity:1; } 54%{ opacity:1; } 100%{ opacity:0; } }
+
+/* -- 3. Fundido con velo dorado (degradado que recorre la pantalla) -- */
+.sweep-veil{
+  position:absolute; inset:0; z-index:15; pointer-events:none; opacity:0;
+  background: linear-gradient(100deg, transparent 28%, rgba(255,209,140,.30) 47%, rgba(255,193,105,.5) 50%, rgba(255,209,140,.30) 53%, transparent 72%);
+  background-size:300% 100%; background-position:0% 0%;
+}
+@keyframes sweepShimmer{
+  0%{ opacity:0; background-position:120% 0%; }
+  35%{ opacity:.85; }
+  65%{ opacity:.85; }
+  100%{ opacity:0; background-position:-40% 0%; }
+}
+
+.black-veil{ position:absolute; inset:0; z-index:15; pointer-events:none; background:#050403; opacity:0; }
+
+/* =========================== ENTRADAS DESDE LAS ESQUINAS =========================== */
+
+@keyframes enterTL{ from{opacity:0; transform:translate(-46px,-30px);} to{opacity:1; transform:translate(0,0);} }
+@keyframes enterTR{ from{opacity:0; transform:translate(46px,-30px);} to{opacity:1; transform:translate(0,0);} }
+@keyframes enterBL{ from{opacity:0; transform:translate(-46px,30px);} to{opacity:1; transform:translate(0,0);} }
+@keyframes enterBR{ from{opacity:0; transform:translate(46px,30px);} to{opacity:1; transform:translate(0,0);} }
+@keyframes enterUp{ from{opacity:0; transform:translateY(28px);} to{opacity:1; transform:translateY(0);} }
+
+.from-tl{ opacity:0; animation:enterTL .8s cubic-bezier(.16,1,.3,1) forwards; }
+.from-tr{ opacity:0; animation:enterTR .8s cubic-bezier(.16,1,.3,1) forwards; }
+.from-bl{ opacity:0; animation:enterBL .8s cubic-bezier(.16,1,.3,1) forwards; }
+.from-br{ opacity:0; animation:enterBR .8s cubic-bezier(.16,1,.3,1) forwards; }
+.from-up{ opacity:0; animation:enterUp .8s cubic-bezier(.16,1,.3,1) forwards; }
+
+/* =========================== ESCENA BASE =========================== */
+
+.scene{ position:relative; width:100%; height:100%; padding:var(--pad); overflow:hidden; }
+
+.eyebrow{
+  font-size:clamp(11px,.85vw,13px); letter-spacing:.3em; text-transform:uppercase;
+  color:var(--gold); font-weight:700;
+}
+h1,h2,h3{ font-family:var(--f-display); text-transform:uppercase; letter-spacing:.02em; color:var(--ink); font-weight:400; }
+
+/* ---- media helper ---- */
+.media{ position:relative; width:100%; height:100%; overflow:hidden; border-radius:inherit; }
+.media img{ width:100%; height:100%; object-fit:cover; }
+.media-fallback{ position:absolute; inset:0; display:none; background:linear-gradient(135deg,#2a2116,#0B0A08); align-items:center; justify-content:center; color:var(--ink-soft); font-size:12px; text-align:center; padding:10px; }
+.media-fallback span{ display:block; }
+
+@keyframes punchZoom{ from{ transform:scale(1.32); } to{ transform:scale(1); } }
+@keyframes kenburns{ from{ transform:scale(1) translate(0,0);} to{ transform:scale(1.12) translate(-1.2%,-1%);} }
+.media img.kb{ animation: punchZoom .95s cubic-bezier(.22,1,.36,1) forwards, kenburns 20s ease-in-out .95s infinite alternate; }
+
+@keyframes goldPulse{
+  0%,100%{ text-shadow:0 0 14px rgba(255,193,105,.35), 0 0 34px rgba(232,162,59,.18), 0 0 60px rgba(232,162,59,.08); }
+  50%{ text-shadow:0 0 22px rgba(255,193,105,1), 0 0 55px rgba(232,162,59,.7), 0 0 95px rgba(232,162,59,.35); }
+}
+
+/* =========================== ESCENA · PORTADA =========================== */
+
+.scene-cover{ position:fixed; inset:0; z-index:50; padding:0; }
+.cover-media{ position:absolute; inset:0; }
+.cover-media img{ width:100%; height:100%; object-fit:cover; animation:kenburns 30s ease-in-out infinite alternate; }
+.cover-scrim{ position:absolute; inset:0; background:linear-gradient(0deg, rgba(6,5,3,.88) 0%, rgba(6,5,3,.38) 42%, rgba(6,5,3,.08) 66%, transparent 100%); }
+.cover-content{
+  position:absolute; left:var(--pad); right:var(--pad); bottom:clamp(46px,7vw,100px);
+  max-width:900px;
+}
+.cover-eyebrow{ color:var(--gold-bright); }
+.cover-title{
+  margin-top:10px; font-size:clamp(58px,7.2vw,136px); line-height:.94; color:var(--ink);
+  text-shadow:0 6px 34px rgba(0,0,0,.65);
+}
+.cover-tagline{
+  margin-top:clamp(10px,1.2vw,16px); font-size:clamp(13px,1vw,17px); letter-spacing:.32em;
+  text-transform:uppercase; color:var(--gold); font-weight:600;
+}
+.cover-sub{
+  margin-top:clamp(18px,2.2vw,30px); font-size:clamp(17px,1.5vw,24px); color:var(--ink-soft);
+  max-width:46ch; line-height:1.65;
+}
+
+/* =========================== ESCENA · INTRO DE CATEGORÍA (FILOSOFÍA) =========================== */
+
+.scene-catintro{ display:flex; align-items:center; justify-content:center; }
+.catintro-inner{ max-width:900px; text-align:left; }
+.ci-block{ margin-bottom:clamp(30px,3.4vw,50px); }
+.ci-block:last-child{ margin-bottom:0; }
+.ci-block.ci-divider{ padding-top:clamp(26px,3vw,44px); border-top:1px solid var(--line); }
+.catintro-inner h2{ font-size:clamp(34px,3.8vw,62px); line-height:.98; margin:10px 0 clamp(14px,1.6vw,22px); }
+.catintro-inner p{
+  font-size:clamp(15px,1.15vw,19px); line-height:1.75; color:var(--ink-soft); max-width:64ch;
+}
+
+/* =========================== ESCENA · PRODUCTO A PANTALLA COMPLETA =========================== */
+/* Un producto por página: la foto cubre TODO el área de exhibición
+   (misma técnica que la portada) y el nombre + los badges de confianza
+   flotan encima, legibles gracias a un degradado oscuro por detrás. */
+
+.scene.scene-products{ padding:0; }
+.scene-products{ position:relative; height:100%; }
+
+.pp-media{ position:absolute; inset:0; }
+.pp-scrim{
+  position:absolute; inset:0;
+  background:
+    linear-gradient(0deg, rgba(6,5,3,.92) 0%, rgba(6,5,3,.62) 20%, rgba(6,5,3,.08) 44%, transparent 58%),
+    linear-gradient(180deg, rgba(6,5,3,.4) 0%, transparent 22%);
+}
+
+.pp-content{
+  position:absolute; left:var(--pad); right:var(--pad); bottom:clamp(96px,13vh,158px); z-index:5;
+}
+.pp-name{
+  opacity:0;
+  font-family:var(--f-display); text-transform:uppercase; font-weight:400;
+  font-size:clamp(60px,7.4vw,132px); line-height:.94; letter-spacing:.02em; color:var(--ink);
+  max-width:22ch;
+  animation:
+    enterUp .8s cubic-bezier(.16,1,.3,1) .18s forwards,
+    goldPulse 2.8s ease-in-out 1s infinite;
+}
+
+/* =========================== BADGES DE CONFIANZA (pie de página) =========================== */
+
+.trust-footer{
+  position:absolute; left:var(--pad); right:var(--pad); bottom:clamp(16px,2vw,26px);
+  display:flex; justify-content:center; gap:clamp(20px,2.6vw,44px);
+}
+.trust-item{
+  display:flex; align-items:center; gap:8px; color:var(--ink-soft);
+  font-size:clamp(9.5px,.68vw,11.5px); letter-spacing:.14em; text-transform:uppercase; font-weight:600;
+}
+.trust-item svg{ width:clamp(14px,1.05vw,18px); height:clamp(14px,1.05vw,18px); color:var(--gold); flex-shrink:0; fill:none; stroke:currentColor; stroke-width:1.5; }
+
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <aside class="sidebar" id="sidebar">
+    <div class="sb-particles" aria-hidden="true">
+      <i class="sbp" style="left:12%; width:2px; height:2px; --sbp-drift:6px; animation-duration:9.5s; animation-delay:0s;"></i>
+      <i class="sbp" style="left:32%; width:3px; height:3px; --sbp-drift:-8px; animation-duration:12.5s; animation-delay:2.6s;"></i>
+      <i class="sbp" style="left:55%; width:2px; height:2px; --sbp-drift:9px; animation-duration:10.8s; animation-delay:5.1s;"></i>
+      <i class="sbp" style="left:75%; width:2.5px; height:2.5px; --sbp-drift:-6px; animation-duration:14s; animation-delay:1.2s;"></i>
+      <i class="sbp" style="left:22%; width:2.5px; height:2.5px; --sbp-drift:5px; animation-duration:11.2s; animation-delay:6.8s;"></i>
+      <i class="sbp" style="left:48%; width:2px; height:2px; --sbp-drift:-9px; animation-duration:9.8s; animation-delay:3.7s;"></i>
+      <i class="sbp" style="left:68%; width:3px; height:3px; --sbp-drift:7px; animation-duration:13.4s; animation-delay:8.2s;"></i>
+      <i class="sbp" style="left:8%; width:2.5px; height:2.5px; --sbp-drift:-5px; animation-duration:10.2s; animation-delay:4.4s;"></i>
+    </div>
+    <div class="sb-logo"><img src="img/Isologo.jpeg" alt="La Casa del Cheff" onerror="this.style.display='none'"></div>
+    <div class="sb-middle">
+      <div class="sb-cat-icon" id="sb-cat-icon"></div>
+      <div class="sb-cat-name" id="sb-cat-name"></div>
+      <div class="sb-progress"><div class="sb-progress-fill" id="sb-progress-fill"></div></div>
+    </div>
+  </aside>
+
+  <main class="stage" id="stage">
+    <div class="layer" id="layerA"></div>
+    <div class="layer" id="layerB"></div>
+    <div class="stage-particles" id="stageParticles"></div>
+    <div class="sweep-veil" id="sweepVeil"></div>
+    <div class="black-veil" id="blackVeil"></div>
+  </main>
+
+</div>
+
+<script>
+(function(){
+
+/* =====================================================================
+   1. ÍCONOS (línea minimalista)
+   ===================================================================== */
+const ICON_WHEAT      = '<svg viewBox="0 0 24 24"><path d="M12 2v20M12 6l-4-2M12 6l4-2M12 10l-4-2M12 10l4-2M12 14l-4-2M12 14l4-2M12 18l-3-1.5M12 18l3-1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICON_CROISSANT   = '<svg viewBox="0 0 24 24"><path d="M4 15c0-6 4-10 9-10 4 0 7 3 7 6s-3 4-5 3c1 2-1 4-3 3 0 2-2 3-4 2-2-1-4-2-4-4z" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICON_MUFFIN      = '<svg viewBox="0 0 24 24"><path d="M6 11h12l-1.2 9.5a1 1 0 0 1-1 .9H8.2a1 1 0 0 1-1-.9z" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 11c0-3.3 2.5-6 6-6s6 2.7 6 6" stroke-linecap="round"/></svg>';
+const ICON_COOKIE      = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" stroke-linecap="round"/><circle cx="9" cy="10" r=".8" fill="currentColor" stroke="none"/><circle cx="14" cy="9" r=".8" fill="currentColor" stroke="none"/><circle cx="13" cy="14.2" r=".8" fill="currentColor" stroke="none"/><circle cx="9" cy="15" r=".8" fill="currentColor" stroke="none"/></svg>';
+const ICON_SWIRL       = '<svg viewBox="0 0 24 24"><path d="M12 20a8 8 0 1 1 8-8" stroke-linecap="round"/><path d="M20 12a4 4 0 1 1-4-4" stroke-linecap="round"/></svg>';
+const ICON_CAKE        = '<svg viewBox="0 0 24 24"><path d="M4 20V11c0-1 6-6 8-6s8 5 8 6v9z" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 20h16M8 20v-6M16 20v-6" stroke-linecap="round"/></svg>';
+const ICON_CANDLE      = '<svg viewBox="0 0 24 24"><path d="M12 2c1.2 1.6-.8 2.6-.8 3.8a.8.8 0 0 0 1.6 0C12.8 4.6 10.8 3.6 12 2z"/><rect x="9" y="7.5" width="6" height="13" rx="1"/></svg>';
+
+const ICON_SHIELD  = '<svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 5-3 8-7 9-4-1-7-4-7-9V6z" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICON_LEAF    = '<svg viewBox="0 0 24 24"><path d="M5 19c8 0 14-6 14-14-8 0-14 6-14 14z" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 19c3-5 6-8 11-11" stroke-linecap="round"/></svg>';
+const ICON_NODROP  = '<svg viewBox="0 0 24 24"><path d="M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z" stroke-linecap="round" stroke-linejoin="round"/><line x1="5" y1="19" x2="19" y2="5" stroke-linecap="round"/></svg>';
+
+/* =====================================================================
+   2. HELPERS
+   ===================================================================== */
+const BRAND = { name:'La Casa del Cheff', sub:'Panadería Boutique' };
+
+function imgSrc(file){ return 'img/' + encodeURIComponent(file); }
+
+function media(file, alt, extraClass){
+  return (
+    '<div class="media">' +
+      '<img class="' + (extraClass||'') + '" src="' + imgSrc(file) + '" alt="' + alt + '" ' +
+      'onerror="this.style.display=\'none\'; this.nextElementSibling.style.display=\'flex\';">' +
+      '<div class="media-fallback"><span>' + alt + '</span></div>' +
+    '</div>'
+  );
+}
+
+const TRUST_BADGES = [
+  { icon:ICON_SHIELD, label:'Sin conservadores' },
+  { icon:ICON_LEAF,   label:'100% orgánicos' },
+  { icon:ICON_NODROP, label:'Sin colorantes artificiales' }
+];
+
+function trustFooterHTML(){
+  return (
+    '<div class="trust-footer">' +
+      TRUST_BADGES.map(b => '<div class="trust-item">' + b.icon + '<span>' + b.label + '</span></div>').join('') +
+    '</div>'
+  );
+}
+
+/* ---- renderizadores ---- */
+
+function renderCover(d){
+  return (
+    '<div class="scene scene-cover">' +
+      '<div class="cover-media">' + media(d.image, BRAND.name) + '</div>' +
+      '<div class="cover-scrim"></div>' +
+      '<div class="cover-content">' +
+        '<div class="eyebrow cover-eyebrow from-tl">' + d.welcome + '</div>' +
+        '<h1 class="cover-title from-tl" style="animation-delay:.12s">' + d.name + '</h1>' +
+        '<div class="cover-tagline from-up" style="animation-delay:.3s">' + d.sub + '</div>' +
+        '<p class="cover-sub from-up" style="animation-delay:.44s">' + d.description + '</p>' +
+      '</div>' +
+    '</div>'
+  );
+}
+
+function renderCatIntro(d){
+  const blocks = d.sections.map((s, i) => (
+    '<div class="ci-block' + (i > 0 ? ' ci-divider' : '') + '">' +
+      '<div class="eyebrow from-tl" style="animation-delay:' + (0.15 + i * 0.32).toFixed(2) + 's">' + s.eyebrow + '</div>' +
+      '<h2 class="from-tl" style="animation-delay:' + (0.24 + i * 0.32).toFixed(2) + 's">' + s.title + '</h2>' +
+      '<p class="from-up" style="animation-delay:' + (0.38 + i * 0.32).toFixed(2) + 's">' + s.text + '</p>' +
+    '</div>'
+  )).join('');
+  return (
+    '<div class="scene scene-catintro">' +
+      '<div class="catintro-inner">' + blocks + '</div>' +
+      trustFooterHTML() +
+    '</div>'
+  );
+}
+
+function renderProducts(d){
+  const p = d.product;
+  return (
+    '<div class="scene scene-products">' +
+      '<div class="pp-media">' + media(p.file, p.name, 'kb') + '</div>' +
+      '<div class="pp-scrim"></div>' +
+      '<div class="pp-content">' +
+        '<h2 class="pp-name">' + p.name + '</h2>' +
+      '</div>' +
+      trustFooterHTML() +
+    '</div>'
+  );
+}
+
+const RENDERERS = { cover: renderCover, catintro: renderCatIntro, products: renderProducts };
+
+/* =====================================================================
+   3. DATOS
+   =====================================================================
+   PRODUCTS — el campo `file` debe coincidir EXACTO con el nombre del
+   archivo dentro de la carpeta img/ (mayúsculas y acentos incluidos).
+   No renombré ni recorté ninguna foto: coloca tus archivos originales,
+   tal cual los mandaste, dentro de una carpeta "img" junto a este HTML.
+   ===================================================================== */
+
+const CATEGORIES = [
+  {
+    name:'Masa Madre', icon:ICON_WHEAT,
+    intro:{
+      sections:[
+        {
+          eyebrow:'Nuestro pan',
+          title:'Masa Madre',
+          text:'La masa madre es un fermento natural elaborado a partir de harina y agua. Su lenta fermentación desarrolla sabores más profundos, aromas únicos y una textura especial, dando como resultado panes con carácter, corteza crujiente y una miga llena de matices.'
+        },
+        {
+          eyebrow:'Nuestro compromiso',
+          title:'Filosofía',
+          text:'En La Casa del Cheff creemos en una elaboración más natural y auténtica. Nuestros productos son libres de mejorantes, conservadores y colorantes artificiales, elaborados con ingredientes seleccionados y bajo una filosofía de producción 100% orgánica.'
+        }
+      ]
+    },
+    products:[
+      { name:'Bolillo', file:'Bolillo.jpeg' },
+      { name:'Brioche', file:'Brioche.jpeg' },
+      { name:'Crotones', file:'Crotones.jpeg' },
+      { name:'Baguette de Aceituna', file:'Baguette de aceituna.jpeg' },
+      { name:'Baguette de Ajo', file:'Baguette de ajo.jpeg' },
+      { name:'Baguette de Ajonjolí', file:'Baguette de ajonjoli.jpeg' },
+      { name:'Baguette de Perejil', file:'Baguette de perejil.jpeg' },
+      { name:'Baguette Parmesano', file:'Baguette parmesano.jpeg' },
+      { name:'Hogaza de Arándano y Semillas de Sésamo', file:'Hogaza de arandano y semillas de sesamo.jpeg' },
+      { name:'Hogaza de Cacao, Chispas de Chocolate y Nuez', file:'Hogaza de cacao chispas de chocolate y nuez.jpeg' }
+    ]
+  },
+  {
+    name:'Bollería de Autor', icon:ICON_CROISSANT,
+    products:[
+      { name:'Croissant', file:'Croissant.jpeg' },
+      { name:'Croissant de Avellana', file:'Croissant de avellana.jpeg' },
+      { name:'Croissant de Matcha y Pistache', file:'Croissant de Matcha y Pistache.jpeg' },
+      { name:'Bostok', file:'Bostok.jpeg' },
+      { name:'Chausson de Cajeta y Nuez', file:'Chausson cajeta y nuez.jpeg' },
+      { name:'Chocolatín', file:'Chocolatin.jpeg' },
+      { name:'Concha de Cacao', file:'Concha de cacao.jpeg' },
+      { name:'Concha de Mantequilla', file:'Concha de mantequilla.jpeg' },
+      { name:'Cruffin de Guayaba', file:'Cruffin de guayaba.jpeg' },
+      { name:'Cubilete', file:'Cubilete.jpeg' },
+      { name:'Danesa', file:'Danesa.jpeg' },
+      { name:'Oreja', file:'Oreja.jpeg' }
+    ]
+  },
+  {
+    name:'Panqués y Budines', icon:ICON_MUFFIN,
+    products:[
+      { name:'Panqué de Nata', file:'Panque de nata.jpeg' },
+      { name:'Panqué de Nata y Nuez', file:'Panque de nata y nuez.jpeg' },
+      { name:'Budín', file:'Budin.jpeg' },
+      { name:'Brownie Gluten Free', file:'Brownie gluten free.jpeg' }
+    ]
+  },
+  {
+    name:'Galletería', icon:ICON_COOKIE,
+    products:[
+      { name:'Galleta de Cacao', file:'Galleta de cacao.jpeg' },
+      { name:'Galleta de Limón', file:'Galleta de limon.jpeg' },
+      { name:'Galleta de Nuez', file:'Galleta de nuez.jpeg' },
+      { name:'Galleta Red Velvet', file:'Galleta de red velvet.jpeg' }
+    ]
+  },
+  {
+    name:'Rolls y Trenzas', icon:ICON_SWIRL,
+    products:[
+      { name:'Bolas de Queso', file:'Bolas de queso.jpeg' },
+      { name:'NY Roll de Avellana', file:'NY roll de Avellana.jpeg' },
+      { name:'Roll de Higos', file:'Roll de higos.jpeg' },
+      /* Nombre del producto corregido a "Matcha" — el archivo original
+         que enviaste sigue llamándose con el typo "Masha", así que el
+         código apunta a ese nombre de archivo tal cual está en tu carpeta. */
+      { name:'Roll de Matcha y Pistache', file:'Roll de Masha y pistache.jpeg' },
+      { name:'Trenza de Crema Pastelera y Nuez', file:'Trenza de crema pastelera y nuez.jpeg' }
+    ]
+  },
+  {
+    name:'Pastelería y Tartas', icon:ICON_CAKE,
+    products:[
+      { name:'Abrazo', file:'Abrazo.jpeg' },
+      { name:'Canasta de Frutos Rojos', file:'Canasta de frutos rojos.jpeg' },
+      { name:'Strudel de Manzana', file:'Strudel de manzana.jpeg' },
+      { name:'Tarta de Manzana', file:'Tarta de manzana.jpeg' },
+      { name:'Tarta de Queso', file:'Tarta de queso.jpeg' },
+      { name:'Tartín de Manzana', file:'Tartin de manzana.jpeg' }
+    ]
+  },
+  {
+    name:'Edición Especial', icon:ICON_CANDLE,
+    products:[
+      { name:'Pan de Muerto', file:'Pan de muerto.jpeg' },
+      { name:'Pan de Muerto con Hoja de Totomoxtle', file:'Pan de muerto con hoja de Totomoxtle.jpeg' }
+    ]
+  }
+];
+
+/* ---- construcción automática de `scenes[]` ---- */
+const scenes = [
+  { type:'cover', duration:7000, sidebar:false, data:{
+      image:'Portada.jpeg',
+      welcome:'Bienvenido a',
+      name: BRAND.name,
+      sub: BRAND.sub.toUpperCase(),
+      description:'Horneado artesanal, ingredientes seleccionados y una filosofía 100% orgánica, en cada pieza que sale de nuestro horno.'
+  }}
+];
+
+CATEGORIES.forEach(cat => {
+  if (cat.intro){
+    scenes.push({ type:'catintro', duration:11000, sidebar:true, category:cat.name, icon:cat.icon, data:cat.intro });
+  }
+  cat.products.forEach(p => {
+    scenes.push({
+      type:'products', duration:6500, sidebar:true, category:cat.name, icon:cat.icon,
+      data:{ product:p, category:cat.name }
+    });
+  });
+});
+
+/* =====================================================================
+   4. MOTOR DE ESCENAS
+   ===================================================================== */
+
+const layerA = document.getElementById('layerA');
+const layerB = document.getElementById('layerB');
+const layers = [layerA, layerB];
+const sweepVeil = document.getElementById('sweepVeil');
+const blackVeil = document.getElementById('blackVeil');
+const sidebar = document.getElementById('sidebar');
+
+/* ---- genera las partículas doradas que flotan sobre todo el escenario
+   (incluidas las fotos de producto), reutilizando el mismo estilo visual
+   que ya tenían las del sidebar (.sbp / @keyframes sbFloat). ---- */
+(function initStageParticles(){
+  const wrap = document.getElementById('stageParticles');
+  const COUNT = 22;
+  for (let i = 0; i < COUNT; i++){
+    const el = document.createElement('i');
+    el.className = 'sbp';
+    const size = (Math.random() * 2.4 + 1.6).toFixed(1);
+    const left = (Math.random() * 100).toFixed(1);
+    const dur = (Math.random() * 7 + 9).toFixed(1);
+    const delay = (Math.random() * 12).toFixed(1);
+    const drift = (Math.random() * 20 - 10).toFixed(1);
+    el.style.cssText =
+      'left:' + left + '%; width:' + size + 'px; height:' + size + 'px;' +
+      '--sbp-drift:' + drift + 'px; animation-duration:' + dur + 's; animation-delay:' + delay + 's;';
+    wrap.appendChild(el);
+  }
+})();
+
+/* ---- catálogo de transiciones: familia de fundidos/degradados premium.
+   Cada una anima la capa saliente y la entrante directamente (opacity
+   +/- transform), sin paneles que se deslicen por encima. ---- */
+const EASE = 'cubic-bezier(.45,0,.2,1)';
+const TRANSITIONS = [
+  { // 1. fundido simple (disolvencia clásica)
+    duration: 950,
+    run(outgoing, incoming){
+      outgoing.style.animation = `layerFadeOut ${950}ms ${EASE} forwards`;
+      incoming.style.animation = `layerFadeIn ${950}ms ${EASE} forwards`;
+    }
+  },
+  { // 2. fundido con leve avance de escala (look cinematográfico)
+    duration: 1150,
+    run(outgoing, incoming){
+      outgoing.style.animation = `layerFadeZoomOut 1150ms ${EASE} forwards`;
+      incoming.style.animation = `layerFadeZoomIn 1150ms ${EASE} forwards`;
+    }
+  },
+  { // 3. fundido con velo dorado degradado
+    duration: 1050,
+    run(outgoing, incoming){
+      outgoing.style.animation = `layerFadeOut 1050ms ${EASE} forwards`;
+      incoming.style.animation = `layerFadeIn 1050ms ${EASE} forwards`;
+      sweepVeil.style.animation = `sweepShimmer 1050ms ease forwards`;
+    },
+    cleanup(){ sweepVeil.style.animation = 'none'; }
+  },
+  { // 4. fundido a negro (dip cinematográfico)
+    duration: 1200,
+    run(outgoing, incoming){
+      outgoing.style.animation = `layerFadeOut 520ms ${EASE} forwards`;
+      incoming.style.animation = `layerFadeIn 520ms ${EASE} 640ms forwards`;
+      blackVeil.style.animation = `blackDip 1200ms ease forwards`;
+    },
+    cleanup(){ blackVeil.style.animation = 'none'; }
+  }
+];
+let lastTransitionIdx = -1;
+function pickTransition(){
+  let idx;
+  do { idx = Math.floor(Math.random() * TRANSITIONS.length); } while (idx === lastTransitionIdx && TRANSITIONS.length > 1);
+  lastTransitionIdx = idx;
+  return TRANSITIONS[idx];
+}
+const sbIcon = document.getElementById('sb-cat-icon');
+const sbName = document.getElementById('sb-cat-name');
+const sbFill = document.getElementById('sb-progress-fill');
+
+function updateSidebar(scene, idx){
+  if (scene.sidebar === false){
+    sidebar.classList.add('hidden');
+    return;
+  }
+  sidebar.classList.remove('hidden');
+  sbIcon.innerHTML = scene.icon || '';
+  sbName.textContent = scene.category || '';
+  sbFill.style.height = (((idx + 1) / scenes.length) * 100).toFixed(1) + '%';
+}
+
+let activeIdx = 0;
+let sceneIdx = 0;
+let firstRun = true;
+
+function playScene(){
+  const scene = scenes[sceneIdx];
+  const incoming = layers[1 - activeIdx];
+
+  incoming.className = 'layer';
+  incoming.innerHTML = RENDERERS[scene.type](scene.data);
+  void incoming.offsetWidth;
+
+  updateSidebar(scene, sceneIdx);
+
+  if (firstRun){
+    incoming.classList.add('active');
+    firstRun = false;
+    activeIdx = 1 - activeIdx;
+    sceneIdx = (sceneIdx + 1) % scenes.length;
+    setTimeout(playScene, scene.duration);
+    return;
+  }
+
+  const outgoing = layers[activeIdx];
+  const t = pickTransition();
+
+  incoming.style.zIndex = 3;
+  t.run(outgoing, incoming);
+
+  setTimeout(() => {
+    outgoing.classList.remove('active');
+    outgoing.style.animation = '';
+    outgoing.innerHTML = '';
+    incoming.classList.add('active');
+    incoming.style.animation = '';
+    incoming.style.zIndex = '';
+    if (t.cleanup) t.cleanup();
+  }, t.duration);
+
+  activeIdx = 1 - activeIdx;
+  sceneIdx = (sceneIdx + 1) % scenes.length;
+
+  setTimeout(playScene, scene.duration);
+}
+
+playScene();
+
+})();
+</script>
+
+</body>
+</html>

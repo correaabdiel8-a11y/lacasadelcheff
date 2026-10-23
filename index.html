@@ -64,25 +64,30 @@ html,body{
 }
 
 /* ---- Fondo en movimiento: resplandor dorado girando lentísimo + barrido de brillo diagonal ---- */
+/* OPTIMIZADO: antes era una capa de 160% con blur(10px) girando sin parar
+   (muy pesado para el navegador de una TV). Los degradados ya son suaves,
+   así que se quitó el blur y ahora solo se desplaza/escala (movimiento que
+   la GPU hace casi gratis). */
 .app::before{
-  content:""; position:absolute; inset:-30%; z-index:0; pointer-events:none;
+  content:""; position:absolute; inset:-12%; z-index:0; pointer-events:none;
   background: radial-gradient(circle at 30% 35%, rgba(255,159,28,.14), transparent 55%),
               radial-gradient(circle at 75% 70%, rgba(194,24,91,.18), transparent 50%),
               radial-gradient(circle at 88% 14%, rgba(123,44,191,.16), transparent 45%);
-  animation: glowSpin 90s linear infinite;
-  filter: blur(10px);
+  animation: glowDrift 60s ease-in-out infinite alternate; will-change:transform;
 }
-@keyframes glowSpin{ from{ transform:rotate(0deg);} to{ transform:rotate(360deg);} }
+@keyframes glowDrift{ from{ transform:translate3d(-2%,-1%,0) scale(1); } to{ transform:translate3d(2.5%,1.5%,0) scale(1.08); } }
 
+/* OPTIMIZADO: el barrido ahora es una banda que se traslada (transform),
+   no un background-position animado (que repintaba toda la pantalla). */
 .app::after{
-  content:""; position:absolute; inset:0; z-index:0; pointer-events:none;
-  background: linear-gradient(115deg, transparent 42%, rgba(255,159,28,.07) 50%, transparent 58%);
-  background-size: 320% 320%;
+  content:""; position:absolute; top:0; bottom:0; left:0; width:55%; z-index:0; pointer-events:none;
+  background: linear-gradient(105deg, transparent 0%, rgba(255,159,28,.07) 50%, transparent 100%);
+  transform:translate3d(-120%,0,0); will-change:transform;
   animation: sheenSweep 17s linear infinite;
 }
 @keyframes sheenSweep{
-  0%{ background-position: 0% 0%; }
-  100%{ background-position: 100% 100%; }
+  0%{ transform:translate3d(-120%,0,0); }
+  100%{ transform:translate3d(260%,0,0); }
 }
 
 /* =========================== SIDEBAR PERSISTENTE =========================== */
@@ -170,17 +175,13 @@ html,body{
 @keyframes blackDip{ 0%{ opacity:0; } 46%{ opacity:1; } 54%{ opacity:1; } 100%{ opacity:0; } }
 
 /* -- 3. Fundido con velo dorado (degradado que recorre la pantalla) -- */
-.sweep-veil{
-  position:absolute; inset:0; z-index:15; pointer-events:none; opacity:0;
-  background: linear-gradient(100deg, transparent 28%, rgba(255,214,120,.30) 47%, rgba(255,196,69,.5) 50%, rgba(255,214,120,.30) 53%, transparent 72%);
-  background-size:300% 100%; background-position:0% 0%;
+.sweep-veil{ position:absolute; inset:0; z-index:15; pointer-events:none; opacity:0; overflow:hidden; }
+.sweep-veil i{
+  position:absolute; top:0; bottom:0; left:0; width:70%; transform:translate3d(-100%,0,0);
+  background: linear-gradient(100deg, transparent 0%, rgba(255,214,120,.30) 38%, rgba(255,196,69,.5) 50%, rgba(255,214,120,.30) 62%, transparent 100%);
 }
-@keyframes sweepShimmer{
-  0%{ opacity:0; background-position:120% 0%; }
-  35%{ opacity:.85; }
-  65%{ opacity:.85; }
-  100%{ opacity:0; background-position:-40% 0%; }
-}
+@keyframes sweepShimmer{ 0%{ opacity:0; } 35%{ opacity:.85; } 65%{ opacity:.85; } 100%{ opacity:0; } }
+@keyframes sweepBand{ from{ transform:translate3d(-100%,0,0); } to{ transform:translate3d(155%,0,0); } }
 
 .black-veil{ position:absolute; inset:0; z-index:15; pointer-events:none; background:#0A0310; opacity:0; }
 
@@ -216,12 +217,13 @@ h1,h2,h3{ font-family:var(--f-display); text-transform:uppercase; letter-spacing
 
 @keyframes punchZoom{ from{ transform:scale(1.32); } to{ transform:scale(1); } }
 @keyframes kenburns{ from{ transform:scale(1) translate(0,0);} to{ transform:scale(1.12) translate(-1.2%,-1%);} }
-.media img.kb{ animation: punchZoom .95s cubic-bezier(.22,1,.36,1) forwards, kenburns 20s ease-in-out .95s infinite alternate; }
+.media img.kb{ will-change:transform; animation: punchZoom .95s cubic-bezier(.22,1,.36,1) forwards, kenburns 20s ease-in-out .95s infinite alternate; }
 
-@keyframes goldPulse{
-  0%,100%{ text-shadow:0 0 14px rgba(255,159,28,.4), 0 0 34px rgba(255,159,28,.2), 0 0 60px rgba(230,57,127,.14); }
-  50%{ text-shadow:0 0 22px rgba(255,196,69,1), 0 0 55px rgba(255,159,28,.7), 0 0 95px rgba(230,57,127,.42); }
-}
+/* OPTIMIZADO: antes se animaba el text-shadow (sombras de hasta 95px que se
+   volvían a calcular en cada fotograma). Ahora hay DOS capas de brillo: la
+   suave (en el propio texto) y la intensa (en ::after), y solo se anima la
+   opacidad de la intensa. Se ve igual, pero cuesta una fracción. */
+@keyframes glowBreath{ 0%,100%{ opacity:0; } 50%{ opacity:1; } }
 
 /* =========================== ESCENA · PORTADA =========================== */
 
@@ -282,10 +284,15 @@ h1,h2,h3{ font-family:var(--f-display); text-transform:uppercase; letter-spacing
   opacity:0;
   font-family:var(--f-display); text-transform:uppercase; font-weight:400;
   font-size:clamp(60px,7.4vw,132px); line-height:.94; letter-spacing:.02em; color:var(--ink);
-  max-width:22ch;
-  animation:
-    enterUp .8s cubic-bezier(.16,1,.3,1) .18s forwards,
-    goldPulse 2.8s ease-in-out 1s infinite;
+  max-width:22ch; position:relative;
+  text-shadow:0 0 14px rgba(255,159,28,.4), 0 0 34px rgba(255,159,28,.2), 0 0 60px rgba(230,57,127,.14);
+  animation: enterUp .8s cubic-bezier(.16,1,.3,1) .18s forwards;
+}
+.pp-name::after{
+  content:attr(data-text); position:absolute; left:0; top:0; width:100%;
+  color:transparent; pointer-events:none; opacity:0;
+  text-shadow:0 0 22px rgba(255,196,69,1), 0 0 55px rgba(255,159,28,.7), 0 0 95px rgba(230,57,127,.42);
+  animation: glowBreath 2.8s ease-in-out 1s infinite; will-change:opacity;
 }
 
 /* =========================== BADGES DE CONFIANZA (pie de página) =========================== */
@@ -350,6 +357,23 @@ h1,h2,h3{ font-family:var(--f-display); text-transform:uppercase; letter-spacing
   100%{ transform:translate3d(0,112vh,0) rotate(420deg); opacity:0; }
 }
 
+/* =====================================================================
+   MODOS DE RENDIMIENTO (los activa solo el menú si detecta que va lento;
+   también se pueden forzar con ?modo=lite  /  ?modo=ultra  /  ?modo=normal)
+   ===================================================================== */
+.lite .app::after{ display:none; }
+.lite .app::before{ animation:none; }
+.lite .sb-particles, .lite .sb-flower{ display:none; }
+.lite .pf{ animation:none; }
+.lite .petal:nth-child(n+8){ display:none; }
+.lite .pp-name::after{ animation:none; opacity:.55; }
+
+.ultra .petal{ display:none; }
+.ultra .pp-name::after{ display:none; }
+.ultra .media img.kb{ animation: punchZoom .95s cubic-bezier(.22,1,.36,1) forwards; }
+.ultra .cover-media img{ animation:none; }
+.ultra .app::before{ display:none; }
+
 </style>
 </head>
 <body>
@@ -383,7 +407,7 @@ h1,h2,h3{ font-family:var(--f-display); text-transform:uppercase; letter-spacing
     <div class="layer" id="layerA"></div>
     <div class="layer" id="layerB"></div>
     <div class="stage-particles" id="stageParticles"></div>
-    <div class="sweep-veil" id="sweepVeil"></div>
+    <div class="sweep-veil" id="sweepVeil"><i></i></div>
     <div class="black-veil" id="blackVeil"></div>
   </main>
 
@@ -418,7 +442,7 @@ function imgSrc(file){ return 'img/' + encodeURIComponent(file); }
 function media(file, alt, extraClass){
   return (
     '<div class="media">' +
-      '<img class="' + (extraClass||'') + '" src="' + imgSrc(file) + '" alt="' + alt + '" ' +
+      '<img class="' + (extraClass||'') + '" src="' + imgSrc(file) + '" alt="' + alt + '" decoding="async" ' +
       'onerror="this.style.display=\'none\'; this.nextElementSibling.style.display=\'flex\';">' +
       '<div class="media-fallback"><span>' + alt + '</span></div>' +
     '</div>'
@@ -479,7 +503,7 @@ function renderProducts(d){
       '<div class="pp-media">' + media(p.file, p.name, 'kb') + '</div>' +
       '<div class="pp-scrim"></div>' +
       '<div class="pp-content">' +
-        '<h2 class="pp-name">' + p.name + '</h2>' +
+        '<h2 class="pp-name" data-text="' + p.name.replace(/"/g,'&quot;') + '">' + p.name + '</h2>' +
       '</div>' +
       trustFooterHTML() +
     '</div>'
@@ -656,7 +680,7 @@ const sidebar = document.getElementById('sidebar');
     ['#FFC445','#FF9F1C'], ['#FF9F1C','#E0640A'], ['#FFD23F','#FF9F1C'],
     ['#FF9F1C','#E0640A'], ['#F0508C','#C2185B']
   ];
-  const COUNT = 18;
+  const COUNT = 14;
   for (let i = 0; i < COUNT; i++){
     const el = document.createElement('i');
     el.className = 'petal';
@@ -732,8 +756,9 @@ const TRANSITIONS = [
       outgoing.style.animation = `layerFadeOut 1050ms ${EASE} forwards`;
       incoming.style.animation = `layerFadeIn 1050ms ${EASE} forwards`;
       sweepVeil.style.animation = `sweepShimmer 1050ms ease forwards`;
+      sweepVeil.firstElementChild.style.animation = `sweepBand 1050ms ease forwards`;
     },
-    cleanup(){ sweepVeil.style.animation = 'none'; }
+    cleanup(){ sweepVeil.style.animation = 'none'; sweepVeil.firstElementChild.style.animation = 'none'; }
   },
   { // 4. fundido a negro (dip cinematográfico)
     duration: 1200,
@@ -746,7 +771,9 @@ const TRANSITIONS = [
   }
 ];
 let lastTransitionIdx = -1;
+let perfLevel = 0;                      // 0 normal · 1 lite · 2 ultra
 function pickTransition(){
+  if (perfLevel > 0) return TRANSITIONS[0];          // en modo lite/ultra: solo fundido simple
   let idx;
   do { idx = Math.floor(Math.random() * TRANSITIONS.length); } while (idx === lastTransitionIdx && TRANSITIONS.length > 1);
   lastTransitionIdx = idx;
@@ -773,7 +800,12 @@ function updateSidebar(scene, idx){
 function preloadNext(){
   const nx = scenes[(sceneIdx + 1) % scenes.length];
   const base = nx.type === 'cover' ? nx.data.image : (nx.type === 'products' ? nx.data.product.file : null);
-  if (base){ const im = new Image(); im.src = imgSrc(base); }
+  if (base){
+    const im = new Image();
+    im.decoding = 'async';
+    im.src = imgSrc(base);
+    if (im.decode) im.decode().catch(function(){});   // la deja lista antes de la transición
+  }
 }
 
 let activeIdx = 0;
@@ -821,6 +853,52 @@ function playScene(){
 
   setTimeout(playScene, scene.duration);
 }
+
+/* =====================================================================
+   5. MODO AUTOMÁTICO DE RENDIMIENTO
+   Mide los fotogramas reales que logra el navegador de la TV. Si ve que se
+   traba, apaga primero los efectos más pesados (nivel 1 = "lite") y, si
+   sigue lento, también el zoom de las fotos y los pétalos (nivel 2 = "ultra").
+   Solo baja de nivel (no sube) para evitar parpadeos de efectos.
+   Se puede forzar con la URL:  ...index.html?modo=lite | ultra | normal
+   ===================================================================== */
+function setPerf(level){
+  perfLevel = level;
+  document.body.classList.toggle('lite', level >= 1);
+  document.body.classList.toggle('ultra', level >= 2);
+}
+
+(function perfMonitor(){
+  const forced = new URLSearchParams(location.search).get('modo');
+  if (forced === 'lite')   { setPerf(1); return; }
+  if (forced === 'ultra')  { setPerf(2); return; }
+  if (forced === 'normal') { return; }
+
+  const WINDOW_MS = 6000, WARMUP_MS = 5000;
+  let stamps = [], last = 0, winStart = 0, started = performance.now();
+
+  function evaluate(){
+    if (stamps.length < 20) return;
+    const dt = [];
+    for (let i = 1; i < stamps.length; i++) dt.push(stamps[i] - stamps[i-1]);
+    dt.sort((a,b) => a - b);
+    const avg = dt.reduce((a,b) => a + b, 0) / dt.length;
+    const p90 = dt[Math.floor(dt.length * 0.9)];
+    const fps = 1000 / avg;
+    // trabado = menos de ~26 fps promedio, o saltos frecuentes de más de 60 ms
+    if ((fps < 26 || p90 > 60) && perfLevel < 2) setPerf(perfLevel + 1);
+  }
+
+  function frame(t){
+    if (t - started > WARMUP_MS){
+      if (!winStart) winStart = t;
+      stamps.push(t);
+      if (t - winStart >= WINDOW_MS){ evaluate(); stamps = []; winStart = t; }
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
 
 playScene();
 

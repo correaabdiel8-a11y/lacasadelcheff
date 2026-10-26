@@ -74,6 +74,7 @@ html,body{
               radial-gradient(circle at 75% 70%, rgba(194,24,91,.18), transparent 50%),
               radial-gradient(circle at 88% 14%, rgba(123,44,191,.16), transparent 45%);
   animation: glowDrift 60s ease-in-out infinite alternate; will-change:transform;
+  animation-play-state:paused; /* solo corre cuando el fondo se ve (intros de categoría) */
 }
 @keyframes glowDrift{ from{ transform:translate3d(-2%,-1%,0) scale(1); } to{ transform:translate3d(2.5%,1.5%,0) scale(1.08); } }
 
@@ -83,12 +84,16 @@ html,body{
   content:""; position:absolute; top:0; bottom:0; left:0; width:55%; z-index:0; pointer-events:none;
   background: linear-gradient(105deg, transparent 0%, rgba(255,159,28,.07) 50%, transparent 100%);
   transform:translate3d(-120%,0,0); will-change:transform;
-  animation: sheenSweep 17s linear infinite;
+  animation: sheenSweep 17s linear infinite; animation-play-state:paused;
 }
 @keyframes sheenSweep{
   0%{ transform:translate3d(-120%,0,0); }
   100%{ transform:translate3d(260%,0,0); }
 }
+/* NUEVO: detrás de las fotos de producto estas dos capas NO se ven (la foto
+   las tapa), pero seguían animándose y consumiendo GPU. Ahora solo corren
+   en las escenas de intro de categoría, que es donde sí se ven. */
+.app.bg-live::before, .app.bg-live::after{ animation-play-state:running; }
 
 /* =========================== SIDEBAR PERSISTENTE =========================== */
 
@@ -157,7 +162,10 @@ html,body{
 /* =========================== STAGE / CAPAS =========================== */
 
 .stage{ position:relative; z-index:1; grid-column:2; overflow:hidden; }
-.layer{ position:absolute; inset:0; opacity:0; }
+.layer{ position:absolute; inset:0; opacity:0; will-change:opacity; }
+/* NUEVO: la escena siguiente se arma y decodifica en segundo plano con las
+   animaciones en pausa; arrancan todas juntas cuando empieza la transición. */
+.layer.preparing *, .layer.preparing *::before, .layer.preparing *::after{ animation-play-state:paused !important; }
 .layer.active{ opacity:1; z-index:2; }
 
 /* ---- Transiciones de escena: familia de fundidos/degradados premium.
@@ -217,7 +225,16 @@ h1,h2,h3{ font-family:var(--f-display); text-transform:uppercase; letter-spacing
 
 @keyframes punchZoom{ from{ transform:scale(1.32); } to{ transform:scale(1); } }
 @keyframes kenburns{ from{ transform:scale(1) translate(0,0);} to{ transform:scale(1.12) translate(-1.2%,-1%);} }
-.media img.kb{ will-change:transform; animation: punchZoom .95s cubic-bezier(.22,1,.36,1) forwards, kenburns 20s ease-in-out .95s infinite alternate; }
+/* OPTIMIZADO: antes eran DOS animaciones encadenadas sobre la foto y la segunda
+   quedaba corriendo en bucle infinito. Ahora es UNA sola, finita (8 s = lo que
+   dura la escena + la transición), con el mismo look: golpe de zoom inicial
+   y avance lento después. */
+@keyframes kbPunch{
+  0%  { transform:scale(1.32) translate(0,0);        animation-timing-function:cubic-bezier(.22,1,.36,1); }
+  12% { transform:scale(1) translate(0,0);           animation-timing-function:ease-in-out; }
+  100%{ transform:scale(1.045) translate(-.45%,-.35%); }
+}
+.media img.kb{ will-change:transform; animation: kbPunch 8s linear forwards; }
 
 /* OPTIMIZADO: antes se animaba el text-shadow (sombras de hasta 95px que se
    volvían a calcular en cada fotograma). Ahora hay DOS capas de brillo: la
@@ -229,7 +246,7 @@ h1,h2,h3{ font-family:var(--f-display); text-transform:uppercase; letter-spacing
 
 .scene-cover{ position:fixed; inset:0; z-index:50; padding:0; }
 .cover-media{ position:absolute; inset:0; }
-.cover-media img{ width:100%; height:100%; object-fit:cover; animation:kenburns 30s ease-in-out infinite alternate; }
+.cover-media img{ width:100%; height:100%; object-fit:cover; animation:kenburns 30s ease-in-out forwards; will-change:transform; }
 .cover-scrim{ position:absolute; inset:0; background:linear-gradient(0deg, rgba(12,4,14,.88) 0%, rgba(12,4,14,.38) 42%, rgba(12,4,14,.08) 66%, transparent 100%); }
 .cover-content{
   position:absolute; left:var(--pad); right:var(--pad); bottom:clamp(46px,7vw,100px);
@@ -321,9 +338,12 @@ h1,h2,h3{ font-family:var(--f-display); text-transform:uppercase; letter-spacing
 .pk-line{ position:absolute; left:0; right:0; top:0; height:2px; background:rgba(255,196,69,.75); }
 .pf{
   display:block; flex:1 1 0; min-width:0; height:auto; aspect-ratio:60/48;
-  transform-origin:50% 0; opacity:.94;
-  animation:pfSway 5s ease-in-out infinite alternate;
+  transform-origin:50% 0;
 }
+/* OPTIMIZADO: antes las 22 banderitas se mecían (22 capas animadas para siempre
+   + opacity:.94 en cada una). Ahora solo se mece 1 de cada N (ver CONFIG) y la
+   transparencia va dentro del propio dibujo (fill-opacity). */
+.pf.sw{ animation:pfSway 5s ease-in-out infinite alternate; will-change:transform; }
 @keyframes pfSway{ from{ transform:rotate(-2.4deg); } to{ transform:rotate(2.4deg); } }
 
 /* ---- Guirnalda de cempasúchil sobre el borde del menú lateral ---- */
@@ -364,13 +384,14 @@ h1,h2,h3{ font-family:var(--f-display); text-transform:uppercase; letter-spacing
 .lite .app::after{ display:none; }
 .lite .app::before{ animation:none; }
 .lite .sb-particles, .lite .sb-flower{ display:none; }
-.lite .pf{ animation:none; }
-.lite .petal:nth-child(n+8){ display:none; }
+.lite .pf.sw{ animation:none; }
+.lite .picado{ transition:none; }
+.lite .petal:nth-child(n+4){ display:none; }
 .lite .pp-name::after{ animation:none; opacity:.55; }
 
 .ultra .petal{ display:none; }
 .ultra .pp-name::after{ display:none; }
-.ultra .media img.kb{ animation: punchZoom .95s cubic-bezier(.22,1,.36,1) forwards; }
+.ultra .media img.kb, .no-kb .media img.kb{ animation: punchZoom .95s cubic-bezier(.22,1,.36,1) forwards; }
 .ultra .cover-media img{ animation:none; }
 .ultra .app::before{ display:none; }
 
@@ -415,6 +436,17 @@ h1,h2,h3{ font-family:var(--f-display); text-transform:uppercase; letter-spacing
 
 <script>
 (function(){
+
+/* =====================================================================
+   0. CONFIG — perillas de rendimiento (si algo va lento en la TV, bájalas)
+   ===================================================================== */
+const CONFIG = {
+  petals: 6,                          // pétalos cayendo sobre las fotos (antes 14). 0 = ninguno
+  picadoSwayEvery: 4,                 // se mece 1 de cada N banderitas (antes todas). 0 = ninguna
+  kenBurns: true,                     // zoom lento de las fotos. false = solo el "golpe" inicial
+  transitions: ['fade','veil','dip'], // disponibles: 'fade','zoom','veil','dip'
+  reloadAfterHours: 12                // recarga sola la página al iniciar un ciclo (0 = nunca)
+};
 
 /* =====================================================================
    1. ÍCONOS (línea minimalista)
@@ -680,7 +712,7 @@ const sidebar = document.getElementById('sidebar');
     ['#FFC445','#FF9F1C'], ['#FF9F1C','#E0640A'], ['#FFD23F','#FF9F1C'],
     ['#FF9F1C','#E0640A'], ['#F0508C','#C2185B']
   ];
-  const COUNT = 14;
+  const COUNT = CONFIG.petals;
   for (let i = 0; i < COUNT; i++){
     const el = document.createElement('i');
     el.className = 'petal';
@@ -714,8 +746,10 @@ const sidebar = document.getElementById('sidebar');
   for (let i = 0; i < N; i++){
     const dur = (4 + Math.random() * 2.6).toFixed(1);
     const delay = (-Math.random() * 6).toFixed(1);
-    html += '<svg class="pf" viewBox="0 0 60 48" style="animation-duration:' + dur + 's; animation-delay:' + delay + 's;">' +
-              '<path fill="' + PAL[i % PAL.length] + '" fill-rule="evenodd" d="' + FLAG + CUTS[i % CUTS.length] + '"/></svg>';
+    const sw = CONFIG.picadoSwayEvery > 0 && i % CONFIG.picadoSwayEvery === 0;
+    html += '<svg class="pf' + (sw ? ' sw' : '') + '" viewBox="0 0 60 48"' +
+              (sw ? ' style="animation-duration:' + dur + 's; animation-delay:' + delay + 's;"' : '') + '>' +
+              '<path fill="' + PAL[i % PAL.length] + '" fill-opacity=".94" fill-rule="evenodd" d="' + FLAG + CUTS[i % CUTS.length] + '"/></svg>';
   }
   el.innerHTML = html;
 })();
@@ -737,21 +771,21 @@ const sidebar = document.getElementById('sidebar');
 const EASE = 'cubic-bezier(.45,0,.2,1)';
 const TRANSITIONS = [
   { // 1. fundido simple (disolvencia clásica)
-    duration: 950,
+    name:'fade', duration: 950,
     run(outgoing, incoming){
       outgoing.style.animation = `layerFadeOut ${950}ms ${EASE} forwards`;
       incoming.style.animation = `layerFadeIn ${950}ms ${EASE} forwards`;
     }
   },
   { // 2. fundido con leve avance de escala (look cinematográfico)
-    duration: 1150,
+    name:'zoom', duration: 1150,
     run(outgoing, incoming){
       outgoing.style.animation = `layerFadeZoomOut 1150ms ${EASE} forwards`;
       incoming.style.animation = `layerFadeZoomIn 1150ms ${EASE} forwards`;
     }
   },
   { // 3. fundido con velo dorado degradado
-    duration: 1050,
+    name:'veil', duration: 1050,
     run(outgoing, incoming){
       outgoing.style.animation = `layerFadeOut 1050ms ${EASE} forwards`;
       incoming.style.animation = `layerFadeIn 1050ms ${EASE} forwards`;
@@ -761,7 +795,7 @@ const TRANSITIONS = [
     cleanup(){ sweepVeil.style.animation = 'none'; sweepVeil.firstElementChild.style.animation = 'none'; }
   },
   { // 4. fundido a negro (dip cinematográfico)
-    duration: 1200,
+    name:'dip', duration: 1200,
     run(outgoing, incoming){
       outgoing.style.animation = `layerFadeOut 520ms ${EASE} forwards`;
       incoming.style.animation = `layerFadeIn 520ms ${EASE} 640ms forwards`;
@@ -772,12 +806,14 @@ const TRANSITIONS = [
 ];
 let lastTransitionIdx = -1;
 let perfLevel = 0;                      // 0 normal · 1 lite · 2 ultra
+const TPOOL = TRANSITIONS.filter(function(t){ return CONFIG.transitions.indexOf(t.name) !== -1; });
+if (!TPOOL.length) TPOOL.push(TRANSITIONS[0]);
 function pickTransition(){
   if (perfLevel > 0) return TRANSITIONS[0];          // en modo lite/ultra: solo fundido simple
   let idx;
-  do { idx = Math.floor(Math.random() * TRANSITIONS.length); } while (idx === lastTransitionIdx && TRANSITIONS.length > 1);
+  do { idx = Math.floor(Math.random() * TPOOL.length); } while (idx === lastTransitionIdx && TPOOL.length > 1);
   lastTransitionIdx = idx;
-  return TRANSITIONS[idx];
+  return TPOOL[idx];
 }
 const sbIcon = document.getElementById('sb-cat-icon');
 const sbName = document.getElementById('sb-cat-name');
@@ -786,6 +822,7 @@ const sbFill = document.getElementById('sb-progress-fill');
 const appEl = document.querySelector('.app');
 function updateSidebar(scene, idx){
   appEl.classList.toggle('is-cover', scene.sidebar === false);
+  appEl.classList.toggle('bg-live', scene.type === 'catintro');
   if (scene.sidebar === false){
     sidebar.classList.add('hidden');
     return;
@@ -796,61 +833,77 @@ function updateSidebar(scene, idx){
   sbFill.style.height = (((idx + 1) / scenes.length) * 100).toFixed(1) + '%';
 }
 
-/* precarga la foto de la escena siguiente para que no "salte" al entrar */
-function preloadNext(){
-  const nx = scenes[(sceneIdx + 1) % scenes.length];
-  const base = nx.type === 'cover' ? nx.data.image : (nx.type === 'products' ? nx.data.product.file : null);
-  if (base){
-    const im = new Image();
-    im.decoding = 'async';
-    im.src = imgSrc(base);
-    if (im.decode) im.decode().catch(function(){});   // la deja lista antes de la transición
-  }
-}
-
+/* =====================================================================
+   OPTIMIZADO: la escena siguiente se ARMA y se DECODIFICA en segundo plano
+   (en la capa libre, invisible, con animaciones en pausa) mientras la
+   escena actual está estable. Antes el JPEG se decodificaba justo al
+   empezar la transición, que es lo que producía el tirón al cambiar.
+   ===================================================================== */
 let activeIdx = 0;
 let sceneIdx = 0;
 let firstRun = true;
+let prepared = null;
+
+function wait(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+
+function prepareScene(idx){
+  const layer = layers[1 - activeIdx];
+  const scene = scenes[idx];
+  layer.style.animation = '';
+  layer.style.zIndex = '';
+  layer.className = 'layer preparing';
+  layer.innerHTML = RENDERERS[scene.type](scene.data);
+  const img = layer.querySelector('.media img');
+  const decoded = (img && img.decode) ? img.decode().catch(function(){}) : Promise.resolve();
+  prepared = { idx: idx, layer: layer, ready: Promise.race([decoded, wait(3000)]) };
+}
 
 function playScene(){
-  const scene = scenes[sceneIdx];
-  const incoming = layers[1 - activeIdx];
-  preloadNext();
+  const idx = sceneIdx;
+  // recarga preventiva (libera memoria del navegador de la TV) justo al iniciar un ciclo
+  if (idx === 0 && !firstRun && CONFIG.reloadAfterHours > 0 &&
+      performance.now() > CONFIG.reloadAfterHours * 3600000){ location.reload(); return; }
+  if (!prepared || prepared.idx !== idx) prepareScene(idx);
+  const p = prepared; prepared = null;
+  p.ready.then(function(){ startScene(idx, p.layer); });
+}
 
-  incoming.className = 'layer';
-  incoming.innerHTML = RENDERERS[scene.type](scene.data);
+function startScene(idx, incoming){
+  const scene = scenes[idx];
+  incoming.classList.remove('preparing');
   void incoming.offsetWidth;
 
-  updateSidebar(scene, sceneIdx);
+  updateSidebar(scene, idx);
 
+  let settle = 0;
   if (firstRun){
     incoming.classList.add('active');
     firstRun = false;
-    activeIdx = 1 - activeIdx;
-    sceneIdx = (sceneIdx + 1) % scenes.length;
-    setTimeout(playScene, scene.duration);
-    return;
+  } else {
+    const outgoing = layers[activeIdx];
+    const t = pickTransition();
+    settle = t.duration;
+
+    incoming.style.zIndex = 3;
+    t.run(outgoing, incoming);
+
+    setTimeout(function(){
+      outgoing.classList.remove('active');
+      outgoing.style.animation = '';
+      outgoing.innerHTML = '';
+      incoming.classList.add('active');
+      incoming.style.animation = '';
+      incoming.style.zIndex = '';
+      if (t.cleanup) t.cleanup();
+    }, t.duration);
   }
 
-  const outgoing = layers[activeIdx];
-  const t = pickTransition();
-
-  incoming.style.zIndex = 3;
-  t.run(outgoing, incoming);
-
-  setTimeout(() => {
-    outgoing.classList.remove('active');
-    outgoing.style.animation = '';
-    outgoing.innerHTML = '';
-    incoming.classList.add('active');
-    incoming.style.animation = '';
-    incoming.style.zIndex = '';
-    if (t.cleanup) t.cleanup();
-  }, t.duration);
-
   activeIdx = 1 - activeIdx;
-  sceneIdx = (sceneIdx + 1) % scenes.length;
+  const nextIdx = (idx + 1) % scenes.length;
+  sceneIdx = nextIdx;
 
+  // cuando la transición ya terminó y la capa vieja se vació, arma la siguiente
+  setTimeout(function(){ prepareScene(nextIdx); }, settle + 250);
   setTimeout(playScene, scene.duration);
 }
 
@@ -867,29 +920,46 @@ function setPerf(level){
   document.body.classList.toggle('lite', level >= 1);
   document.body.classList.toggle('ultra', level >= 2);
 }
+if (!CONFIG.kenBurns) document.body.classList.add('no-kb');
 
 (function perfMonitor(){
-  const forced = new URLSearchParams(location.search).get('modo');
+  const KEY = 'menuPerf';
+  function save(v){ try{ localStorage.setItem(KEY, String(v)); }catch(e){} }
+  const m = /[?&]modo=(\w+)/.exec(location.search);
+  const forced = m ? m[1] : '';
   if (forced === 'lite')   { setPerf(1); return; }
   if (forced === 'ultra')  { setPerf(2); return; }
-  if (forced === 'normal') { return; }
+  if (forced === 'normal') { save(0); return; }
 
-  const WINDOW_MS = 6000, WARMUP_MS = 5000;
-  let stamps = [], last = 0, winStart = 0, started = performance.now();
+  // NUEVO: recuerda el nivel que ya aprendió (sobrevive a recargas) para no
+  // volver a empezar en "normal" y pasar por los tirones otra vez.
+  let saved = 0;
+  try{ saved = parseInt(localStorage.getItem(KEY), 10) || 0; }catch(e){}
+  if (saved > 0) setPerf(Math.min(saved, 2));
+  if (perfLevel >= 2) return;
+
+  const WINDOW_MS = 6000, WARMUP_MS = 5000, OK_TO_STOP = 3;
+  let stamps = [], winStart = 0, okStreak = 0, done = false;
+  const started = performance.now();
 
   function evaluate(){
     if (stamps.length < 20) return;
     const dt = [];
     for (let i = 1; i < stamps.length; i++) dt.push(stamps[i] - stamps[i-1]);
-    dt.sort((a,b) => a - b);
-    const avg = dt.reduce((a,b) => a + b, 0) / dt.length;
+    dt.sort(function(a,b){ return a - b; });
+    const avg = dt.reduce(function(a,b){ return a + b; }, 0) / dt.length;
     const p90 = dt[Math.floor(dt.length * 0.9)];
     const fps = 1000 / avg;
     // trabado = menos de ~26 fps promedio, o saltos frecuentes de más de 60 ms
-    if ((fps < 26 || p90 > 60) && perfLevel < 2) setPerf(perfLevel + 1);
+    if ((fps < 26 || p90 > 60) && perfLevel < 2){ setPerf(perfLevel + 1); save(perfLevel); okStreak = 0; }
+    else okStreak++;
+    // NUEVO: deja de medir cuando ya se estabilizó (o ya está en el nivel más bajo);
+    // antes el requestAnimationFrame de medición corría para siempre.
+    if (okStreak >= OK_TO_STOP || perfLevel >= 2) done = true;
   }
 
   function frame(t){
+    if (done) return;
     if (t - started > WARMUP_MS){
       if (!winStart) winStart = t;
       stamps.push(t);
